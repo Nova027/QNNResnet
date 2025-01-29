@@ -21,6 +21,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val MODEL_NAME = "resnet50-snapdragon_8_gen_2.so"
         const val CPU_BACKEND_NAME = "libQnnCpu.so"
+        const val INPUT_RAW_NAME = "resnet_f32.raw"
+        const val INPUT_LIST_NAME = "input_list.txt"
         init {
             System.loadLibrary("qnnresnet")
         }
@@ -28,7 +30,8 @@ class MainActivity : ComponentActivity() {
 
     private external fun stringFromJNI(): String
 
-    private external fun setPaths(workingDir: String, modelPath: String, backendPath: String)
+    private external fun setPaths(workingDir: String, modelPath: String,
+                                  backendPath: String, inputListPath: String)
 
     private external fun qnnLoadLibsAndCreateApp() : Int
 
@@ -38,9 +41,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // val abi = Build.SUPPORTED_ABIS[0] Check if arch supports models and runtimes
-        setPaths(this.filesDir.absolutePath, MODEL_NAME, CPU_BACKEND_NAME)
+        // Add returns to copyAsset?
         copyAssetToInternalStorage(this, MODEL_NAME)
         copyAssetToInternalStorage(this, CPU_BACKEND_NAME)
+        copyAssetToInternalStorage(this, INPUT_RAW_NAME)
+        setPaths(this.filesDir.absolutePath, MODEL_NAME, CPU_BACKEND_NAME, INPUT_LIST_NAME)
         var ret = qnnLoadLibsAndCreateApp()
         // Use ret
         ret = qnnInitialize()
@@ -59,7 +64,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun copyAssetToInternalStorage(context: Context, fileName: String): String {
+    private fun createInputLists(context: Context) {
+        val outputFileHandle = File(context.filesDir, INPUT_LIST_NAME)
+        val writeString = "input:=" + context.filesDir.absolutePath + "/" + INPUT_RAW_NAME
+        outputFileHandle.writeText(writeString)
+    }
+
+    private fun copyAssetToInternalStorage(context: Context, fileName: String) {
         val inputStream = context.assets.open(fileName)
         val outputFileHandle = File(context.filesDir, fileName)
         try {
@@ -74,12 +85,10 @@ class MainActivity : ComponentActivity() {
             outputStream.flush()
             outputStream.close()
             inputStream.close()
-
-            return context.filesDir.absolutePath
-        } catch (e: IOException) {
+        }
+        catch (e: IOException) {
             Log.e("AssetCopy", "Failed to copy asset file: $fileName", e)
         }
-        return ""
     }
 }
 

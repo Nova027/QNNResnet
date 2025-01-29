@@ -12,9 +12,7 @@
 #include "QnnWrapperUtils.hpp"
 #include "System/QnnSystemInterface.h"
 
-namespace qnn {
-namespace tools {
-namespace sample_app {
+namespace qnn::tools::sample_app {
 
 // Graph Related Function Handle Types
 typedef qnn_wrapper_api::ModelError_t (*ComposeGraphsFnHandleType_t)(
@@ -38,6 +36,6 @@ typedef struct QnnFunctionPointers {
   QNN_SYSTEM_INTERFACE_VER_TYPE qnnSystemInterface;
 } QnnFunctionPointers;
 
-}  // namespace sample_app
-}  // namespace tools
-}  // namespace qnn
+} // namespace qnn::tools::sample_app
+
+

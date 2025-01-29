@@ -23,8 +23,8 @@ enum class StatusCode {
   FAIL_LOAD_SYSTEM_LIB,
 };
 
-StatusCode getQnnFunctionPointers(std::string backendPath,
-                                  std::string modelPath,
+StatusCode getQnnFunctionPointers(const std::string& backendPath,
+                                  const std::string& modelPath,
                                   sample_app::QnnFunctionPointers* qnnFunctionPointers,
                                   void** backendHandle,
                                   bool loadModelLib,

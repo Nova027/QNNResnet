@@ -33,8 +33,8 @@ static inline T resolveSymbol(void* libHandle, const char* sym) {
 }
 
 dynamicloadutil::StatusCode dynamicloadutil::getQnnFunctionPointers(
-    std::string backendPath,
-    std::string modelPath,
+    const std::string& backendPath,
+    const std::string& modelPath,
     sample_app::QnnFunctionPointers* qnnFunctionPointers,
     void** backendHandleRtn,
     bool loadModelLib,
@@ -91,7 +91,7 @@ dynamicloadutil::StatusCode dynamicloadutil::getQnnFunctionPointers(
     return StatusCode::FAIL_GET_INTERFACE_PROVIDERS;
   }
 
-  if (true == loadModelLib) {
+  if (loadModelLib) {
     QNN_INFO("Loading model shared library ([model].so)");
     void* libModelHandle = pal::dynamicloading::dlOpen(
         modelPath.c_str(), pal::dynamicloading::DL_NOW | pal::dynamicloading::DL_LOCAL);
