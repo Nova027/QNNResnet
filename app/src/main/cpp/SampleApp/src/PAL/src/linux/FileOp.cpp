@@ -13,8 +13,8 @@
 #include <sys/sendfile.h>
 #endif
 #include <dirent.h>
-#include <errno.h>
-#include <limits.h>
+#include <cerrno>
+#include <climits>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>

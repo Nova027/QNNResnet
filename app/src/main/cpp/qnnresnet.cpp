@@ -132,13 +132,28 @@ Java_com_example_qnnresnet_MainActivity_qnnInitialize([[maybe_unused]] JNIEnv* e
         return app->reportError("Graph Finalize failure");
     LOG_D("Graph finalized\n");
 
-    // SHIFT BELOW STUFF TO EXECUTE Function & accept change in inputlist somehow
+    return EXIT_SUCCESS;
+}
 
-    // // execute graph in backend
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_qnnresnet_MainActivity_qnnExecute([[maybe_unused]] JNIEnv* env, jobject /* this */) {
+    // Accept change in inputlist somehow
+
+    // execute graph in backend
     if (!is_qnn_success(app->executeGraphs()))
         return app->reportError("Graph Execution failure");
     LOG_D("Graph Execution successful\n");
 
+    return EXIT_SUCCESS;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_example_qnnresnet_MainActivity_qnnGetOutput(JNIEnv* env, jobject /* this */) {
+    return env->NewStringUTF("Llama");
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_qnnresnet_MainActivity_qnnClose([[maybe_unused]] JNIEnv* env, jobject /* this */) {
     // Free context after done.
     if (!is_qnn_success(app->freeContext()))
         return app->reportError("Context Free failure");
@@ -146,24 +161,10 @@ Java_com_example_qnnresnet_MainActivity_qnnInitialize([[maybe_unused]] JNIEnv* e
     if (device_property_support_status != appFAILURE && app->freeDevice() != appSUCCESS)
         return app->reportError("Device Free failure");
 
-    return EXIT_SUCCESS;
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_com_example_qnnresnet_MainActivity_qnnExecute([[maybe_unused]] JNIEnv* env, jobject /* this */) {
-    return 0;
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_com_example_qnnresnet_MainActivity_getOutput([[maybe_unused]] JNIEnv* env, jobject /* this */) {
-    return 0;
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_com_example_qnnresnet_MainActivity_Close([[maybe_unused]] JNIEnv* env, jobject /* this */) {
     if (sg_backend_handle)
         pal::dynamicloading::dlClose(sg_backend_handle);
     if (sg_model_handle)
         pal::dynamicloading::dlClose(sg_model_handle);
-    return 0;
+
+    return EXIT_SUCCESS;
 }
