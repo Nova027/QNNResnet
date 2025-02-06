@@ -37,6 +37,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
 # Include SampleApp's headers
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC
         SampleApp/src  # Path to SampleApp's source folder
+        .              # Current path containing main cpp's header
 )
 
 # Specifies libraries CMake should link to your target library. You

@@ -6,7 +6,7 @@
 //
 //==============================================================================
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <cstring>
 #include <fstream>
@@ -661,8 +661,12 @@ sample_app::StatusCode sample_app::QnnSampleApp::executeGraphs() {
       break;
     }
   }
-
-  qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount);
-  m_graphsInfo = nullptr;
   return returnStatus;
+}
+
+sample_app::StatusCode sample_app::QnnSampleApp::freeGraphs() {
+    if (qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount))
+        return StatusCode::FAILURE;
+    m_graphsInfo = nullptr;
+    return StatusCode::SUCCESS;
 }
