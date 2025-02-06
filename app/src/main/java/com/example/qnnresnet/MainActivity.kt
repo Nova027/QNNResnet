@@ -71,27 +71,31 @@ class MainActivity : ComponentActivity() {
         // Add returns to copyAsset?
         // Might change assets to jniLibs or vice versa.
         val selectedBackend = GPU_BACKEND_NAME
-        createInputLists(this)
-        copyAssetToInternalStorage(this, MODEL_NAME)
-        copyAssetToInternalStorage(this, selectedBackend)
         if (selectedBackend == HTP_BACKEND_NAME) {
             copyAssetToInternalStorage(this, "libQnnHtpPrepare.so")
             copyAssetToInternalStorage(this, "libQnnHtpV73Skel.so")
             copyAssetToInternalStorage(this, "libQnnHtpV73Stub.so")
         }
+        copyAssetToInternalStorage(this, MODEL_NAME)
+        copyAssetToInternalStorage(this, selectedBackend)
         copyAssetToInternalStorage(this, INPUT_RAW_NAME)
         copyAssetToInternalStorage(this, LABEL_LIST_NAME)
+        createInputLists(this)
+
         setPaths(this.filesDir.absolutePath, MODEL_NAME, selectedBackend, INPUT_LIST_NAME)
         var ret = setLabels()
         Log.d("QNNResnet", "setLabels returned $ret")
         // Use ret
+
         // Add a native func to determine runtime type
         ret = qnnLoadLibsAndCreateApp()
         Log.d("QNNResnet", "qnnLoadLibsAndCreateApp returned $ret")
         // Use ret
+
         ret = qnnInitialize()
         Log.d("QNNResnet", "qnnInit returned $ret")
         // Use ret
+
         setContent {
             QNNResnetTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
