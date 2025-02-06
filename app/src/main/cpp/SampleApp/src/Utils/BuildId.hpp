@@ -7,11 +7,13 @@
 //==============================================================================
 
 #pragma once
+#include <string>
 
-namespace qnn {
-namespace tools {
+namespace qnn::tools {
 
-inline std::string getBuildId() { return std::string("v2.26.0.240827110523_99241"); }
+inline std::string getBuildId() {
+    return "v2.26.0.240827110523_99241";
+}
 
-}  // namespace tools
-}  // namespace qnn
+} // namespace qnn::tools
+

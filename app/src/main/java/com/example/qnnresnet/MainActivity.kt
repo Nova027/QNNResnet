@@ -225,9 +225,3 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
         modifier = modifier
     )
 }
-
-/*
-Open Android Studio and navigate to View > Tool Windows > Device File Explorer.
-In the Device File Explorer, you can navigate to /data/data/<pkg_name> and browse the files and directories within your app's data directory.
-You can pull files from the device to your local machine for inspection or push files from your local machine to the device.
- */

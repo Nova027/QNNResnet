@@ -1,6 +1,5 @@
 [versions]
 agp = "8.8.0"
-cameraAnalysis = "1.4.0"
 cameraCore = "1.4.1"
 kotlin = "2.0.0"
 coreKtx = "1.15.0"
@@ -12,7 +11,6 @@ activityCompose = "1.10.0"
 composeBom = "2025.01.01"
 
 [libraries]
-androidx-camera-analysis = { module = "androidx.camera:camera-analysis", version.ref = "cameraAnalysis" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraCore" }
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "cameraCore" }
