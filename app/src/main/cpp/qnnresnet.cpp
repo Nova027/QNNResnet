@@ -8,17 +8,7 @@
 #include "QnnSampleAppUtils.hpp"
 #include "qnnresnet.h"
 
-// ------------------------------------ JNI functions ------------------------------------------
-
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_qnnresnet_MainActivity_stringFromJNI(JNIEnv* env, jobject /* this */) {
-    std::string hello = "Hello from Native++";
-    return env->NewStringUTF(hello.c_str());
-}
-
-// ------------ QNN stuff --------------
-
-// Global types & variables
+// -------------------------------- Global types & variables ----------------------------------
 using app_t = qnn::tools::sample_app::QnnSampleApp;
 using app_ptr_t = std::unique_ptr<app_t>;
 using qnn_status_t = qnn::tools::sample_app::StatusCode;
@@ -31,6 +21,8 @@ static void* sg_model_handle = nullptr;
 
 static const qnn_status_t appSUCCESS = qnn_status_t::SUCCESS;
 static const qnn_status_t appFAILURE = qnn_status_t::FAILURE;
+
+// ------------------------------------ JNI functions ------------------------------------------
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_qnnresnet_MainActivity_setPaths(JNIEnv* env, jobject /* this */, jstring working_dir,
@@ -82,11 +74,11 @@ extern "C" JNIEXPORT jint JNICALL
 Java_com_example_qnnresnet_MainActivity_qnnLoadLibsAndCreateApp([[maybe_unused]] JNIEnv* env, jobject /* this */) {
     using namespace qnn::tools;
 
-    if (setenv("ADSP_LIBRARY_PATH",g_working_dir.c_str(),0) || getenv("ADSP_LIBRARY_PATH") != g_working_dir) {
+    if (setenv("ADSP_LIBRARY_PATH",g_working_dir.c_str(),0) != 0 || getenv("ADSP_LIBRARY_PATH") != g_working_dir) {
         LOG_D("Failed to set ADSP_LIBRARY_PATH env variable\n");
         return EXIT_FAILURE;
     }
-    if (setenv("LD_LIBRARY_PATH",g_working_dir.c_str(),1) || getenv("LD_LIBRARY_PATH") != g_working_dir) {
+    if (setenv("LD_LIBRARY_PATH",g_working_dir.c_str(),1) != 0 || getenv("LD_LIBRARY_PATH") != g_working_dir) {
         LOG_D("Failed to set LD_LIBRARY_PATH env variable\n");
         return EXIT_FAILURE;
     }

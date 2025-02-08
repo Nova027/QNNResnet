@@ -1,15 +1,19 @@
 package com.example.qnnresnet
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,58 +28,54 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.example.qnnresnet.ui.theme.QNNResnetTheme
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
+    // ----------------------- Static init and Member variables ---------------------
     companion object {
         const val MODEL_NAME = "resnet50-snapdragon_8_gen_2.so"
         const val CPU_BACKEND_NAME = "libQnnCpu.so"
-        const val GPU_BACKEND_NAME = "libQnnGpu.so"
-        const val HTP_BACKEND_NAME = "libQnnHtp.so"
+        // const val GPU_BACKEND_NAME = "libQnnGpu.so"
+        // const val HTP_BACKEND_NAME = "libQnnHtp.so"
         const val INPUT_RAW_NAME = "resnet_f32.raw"
         const val INPUT_LIST_NAME = "input_list.txt"
         const val LABEL_LIST_NAME = "imagenet-classes.txt"
+
+        const val NATIVE_SUCCESS = 0
+
         init {
             System.loadLibrary("qnnresnet")
         }
     }
 
-    private external fun stringFromJNI(): String
+    private var retJNI = NATIVE_SUCCESS
 
-    private external fun setPaths(workingDir: String, modelPath: String,
-                                  backendPath: String, inputListPath: String)
-
-    private external fun setLabels() : Int
-
-    private external fun qnnLoadLibsAndCreateApp() : Int
-
-    private external fun qnnInitialize() : Int
-
-    private external fun qnnExecute() : Int
-
-    private external fun qnnGetOutput() : String
-
-    private external fun qnnClose() : Int
-
+    // ----------------------- Activity-lifecycle management functions ---------------------
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // val abi = Build.SUPPORTED_ABIS[0] Check if arch supports models and runtimes
         // Add returns to copyAsset?
         // Might change assets to jniLibs or vice versa.
-        val selectedBackend = GPU_BACKEND_NAME
-        if (selectedBackend == HTP_BACKEND_NAME) {
-            copyAssetToInternalStorage(this, "libQnnHtpPrepare.so")
-            copyAssetToInternalStorage(this, "libQnnHtpV73Skel.so")
-            copyAssetToInternalStorage(this, "libQnnHtpV73Stub.so")
-        }
+
+        // Add a native func to determine runtime type
+        val selectedBackend = CPU_BACKEND_NAME
+
+        // if (selectedBackend == HTP_BACKEND_NAME) {
+        //     copyAssetToInternalStorage(this, "libQnnHtpPrepare.so")
+        //     copyAssetToInternalStorage(this, "libQnnHtpV73Skel.so")
+        //     copyAssetToInternalStorage(this, "libQnnHtpV73Stub.so")
+        // }
         copyAssetToInternalStorage(this, MODEL_NAME)
         copyAssetToInternalStorage(this, selectedBackend)
         copyAssetToInternalStorage(this, INPUT_RAW_NAME)
@@ -83,69 +83,84 @@ class MainActivity : ComponentActivity() {
         createInputLists(this)
 
         setPaths(this.filesDir.absolutePath, MODEL_NAME, selectedBackend, INPUT_LIST_NAME)
-        var ret = setLabels()
-        Log.d("QNNResnet", "setLabels returned $ret")
-        // Use ret
+        retJNI = setLabels()
+        Log.d("QNNResnet", "setLabels returned $retJNI")
 
-        // Add a native func to determine runtime type
-        ret = qnnLoadLibsAndCreateApp()
-        Log.d("QNNResnet", "qnnLoadLibsAndCreateApp returned $ret")
-        // Use ret
+        retJNI = qnnLoadLibsAndCreateApp()
+        Log.d("QNNResnet", "qnnLoadLibsAndCreateApp returned $retJNI")
 
-        ret = qnnInitialize()
-        Log.d("QNNResnet", "qnnInit returned $ret")
-        // Use ret
+        if (retJNI == NATIVE_SUCCESS) {
+            retJNI = qnnInitialize()
+            Log.d("QNNResnet", "qnnInit returned $retJNI")
+        }
 
-        setContent {
-            QNNResnetTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Column(modifier = Modifier
-                        .padding(innerPadding)
-                        .padding(16.dp))
-                    {
-                        if (ret == 696969)
-                            Text("Error initializing QNN backend")
-                        else if (ret != 0)
-                            Text("Error initializing QNN app")
-                        else
-                            Text("QNN app initialized")
+        setContent { HomeScreen() }
+    }
 
-                        Spacer(modifier = Modifier.height(20.dp))
-                        MainContentColumn()
+    override fun onDestroy() {
+        super.onDestroy()
+        retJNI = qnnClose()
+        Log.d("QNNResnet", "qnnClose returned $retJNI")
+        // Use retJNI??
+    }
 
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Row(horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier
-                                .height(150.dp)
-                                .padding(100.dp)) {
-                            CameraPreview(modifier = Modifier.fillMaxHeight(),
-                                context = LocalContext.current)
+    // ------------------------- Composable functions to show UI ----------------------------
+    @Composable
+    fun HomeScreen() {
+        val hasCameraPermission = remember { mutableStateOf(checkPermission(this)) }
+        val requestPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+            onResult = { granted -> hasCameraPermission.value = granted }
+        )
+        val showCamera = remember { mutableStateOf(false) }
+
+        QNNResnetTheme {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPad ->
+                Column(modifier = Modifier.padding(innerPad).padding(16.dp))
+                {
+                    when (retJNI) {
+                        696969 -> Text("Error initializing QNN backend")
+                        0 -> Text("QNN app initialized")
+                        else -> Text("Error initializing QNN app")
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    ExecutionUI()
+
+                    if (showCamera.value) {
+                        Box(contentAlignment = Alignment.TopCenter,
+                            modifier = Modifier.height(200.dp).width(150.dp).padding(80.dp))
+                        {
+                            if (hasCameraPermission.value)
+                                CameraUI()
+                            else
+                                Text("Grant camera access", color = Color.White,
+                                    modifier = Modifier.fillMaxSize().background(Color.Black))
                         }
                     }
+
+                    Spacer(modifier = Modifier.fillMaxHeight())
+                    // Check if layout and paddings are in correct order!
+
+                    // Add camera enable button
+
+
                 }
             }
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        val ret = qnnClose()
-        Log.d("QNNResnet", "qnnClose returned $ret")
-        // Use ret??
-    }
-
     @Composable
-    fun MainContentColumn() {
+    fun ExecutionUI() {
         val predictedOutput = remember { mutableStateOf("") }
         val ranAlready = remember { mutableStateOf(false) }      // temp, to remove when changing input added!!
-        // Header
-        Greeting(stringFromJNI())
+
         Spacer(modifier = Modifier.height(20.dp))
         // Button row
         Row {
             Button(onClick = {
                 predictedOutput.value = "Result - "
-                if (!ranAlready.value) {
+                if (!ranAlready.value && retJNI == NATIVE_SUCCESS) {
                     val ret2 = qnnExecute()
                     predictedOutput.value += "Ran to find output $ret2 : "
                 }
@@ -171,12 +186,25 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun CameraPreview(modifier: Modifier = Modifier, context: Context) {
-        val cameraController = remember { LifecycleCameraController(context) }
-        cameraController.setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+    fun CameraUI() {
+        val context = LocalContext.current
+        val cameraController = remember {
+            LifecycleCameraController(context).apply {
+                setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        CameraPreview(modifier = Modifier.fillMaxHeight(), cameraController)
+    }
+
+    @Composable
+    fun CameraPreview(modifier: Modifier = Modifier, cameraController: CameraController) {
+        val context = LocalContext.current
+
+
         AndroidView(
             modifier = modifier,
-            factory = { _ ->    // Since we are in MainActivity, the passed context will be always LocalContext.current
+            factory = { _ ->    // Since we are in MainActivity, the context passed to this lambda is LocalContext.current
                 PreviewView(context).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER // Choose your preferred scale type
                     layoutParams = android.view.ViewGroup.LayoutParams(
@@ -188,6 +216,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )
+    }
+
+    // ------------------------- Private member functions ----------------------------
+
+    private fun checkPermission(context: Context) : Boolean {
+        return ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun createInputLists(context: Context) {
@@ -216,12 +250,20 @@ class MainActivity : ComponentActivity() {
             Log.e("AssetCopy", "Failed to copy asset file: $fileName", e)
         }
     }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+    // ------------------------- JNI Native function references ----------------------------
+    private external fun setPaths(workingDir: String, modelPath: String,
+                                  backendPath: String, inputListPath: String)
+
+    private external fun setLabels() : Int
+
+    private external fun qnnLoadLibsAndCreateApp() : Int
+
+    private external fun qnnInitialize() : Int
+
+    private external fun qnnExecute() : Int
+
+    private external fun qnnGetOutput() : String
+
+    private external fun qnnClose() : Int
 }
