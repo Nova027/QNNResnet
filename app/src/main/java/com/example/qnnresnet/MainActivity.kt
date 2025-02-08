@@ -1,31 +1,45 @@
 package com.example.qnnresnet
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,6 +53,9 @@ import com.example.qnnresnet.ui.theme.QNNResnetTheme
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
     // ----------------------- Static init and Member variables ---------------------
@@ -50,6 +67,8 @@ class MainActivity : ComponentActivity() {
         const val INPUT_RAW_NAME = "resnet_f32.raw"
         const val INPUT_LIST_NAME = "input_list.txt"
         const val LABEL_LIST_NAME = "imagenet-classes.txt"
+
+        const val TEMP_JPEG_NAME = "CAM_OUT.jpg"
 
         const val NATIVE_SUCCESS = 0
 
@@ -107,16 +126,19 @@ class MainActivity : ComponentActivity() {
     // ------------------------- Composable functions to show UI ----------------------------
     @Composable
     fun HomeScreen() {
+        val showCamera = remember { mutableStateOf(false) }
         val hasCameraPermission = remember { mutableStateOf(checkPermission(this)) }
         val requestPermissionLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestPermission(),
-            onResult = { granted -> hasCameraPermission.value = granted }
+            onResult = { granted ->
+                hasCameraPermission.value = granted
+                showCamera.value = granted
+            }
         )
-        val showCamera = remember { mutableStateOf(false) }
 
         QNNResnetTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPad ->
-                Column(modifier = Modifier.padding(innerPad).padding(16.dp))
+                Column(modifier = Modifier.fillMaxSize().padding(innerPad).padding(16.dp))
                 {
                     when (retJNI) {
                         696969 -> Text("Error initializing QNN backend")
@@ -128,8 +150,9 @@ class MainActivity : ComponentActivity() {
                     ExecutionUI()
 
                     if (showCamera.value) {
-                        Box(contentAlignment = Alignment.TopCenter,
-                            modifier = Modifier.height(200.dp).width(150.dp).padding(80.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Box(contentAlignment = Alignment.Center,
+                            modifier = Modifier.height(400.dp).aspectRatio(3f / 4f))
                         {
                             if (hasCameraPermission.value)
                                 CameraUI()
@@ -138,13 +161,20 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxSize().background(Color.Black))
                         }
                     }
+                    else if (hasCameraPermission.value)     // If showCamera is false, but this is true => Disabled camera with button, so must turn off cam
+                        CameraUI(enableCamera = false)
 
                     Spacer(modifier = Modifier.fillMaxHeight())
-                    // Check if layout and paddings are in correct order!
 
-                    // Add camera enable button
-
-
+                    // Camera on/off button
+                    Button(onClick = {
+                        showCamera.value = !showCamera.value
+                        if (showCamera.value && !hasCameraPermission.value)
+                            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }) {
+                        Text(if (showCamera.value) "Disable camera" else "Enable camera")
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
             }
         }
@@ -157,7 +187,8 @@ class MainActivity : ComponentActivity() {
 
         Spacer(modifier = Modifier.height(20.dp))
         // Button row
-        Row {
+        Row(modifier = Modifier.height(60.dp))
+        {
             Button(onClick = {
                 predictedOutput.value = "Result - "
                 if (!ranAlready.value && retJNI == NATIVE_SUCCESS) {
@@ -186,42 +217,80 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun CameraUI() {
+    fun CameraUI(enableCamera: Boolean = true) {
         val context = LocalContext.current
         val cameraController = remember {
             LifecycleCameraController(context).apply {
                 setEnabledUseCases(CameraController.IMAGE_CAPTURE)
             }
         }
-        Spacer(modifier = Modifier.height(20.dp))
-        CameraPreview(modifier = Modifier.fillMaxHeight(), cameraController)
+        val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+        LaunchedEffect(enableCamera) {
+            if (enableCamera)
+                cameraController.bindToLifecycle(context as ComponentActivity)
+            else
+                cameraController.unbind()
+        }
+
+        if (enableCamera) {
+            CameraPreview(cameraController)
+            Column(verticalArrangement = Arrangement.Bottom, modifier = Modifier.fillMaxSize()) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.height(100.dp).fillMaxWidth())
+                {
+                    CameraButtonRow(cameraController, cameraExecutor)
+                }
+            }
+        }
     }
 
     @Composable
-    fun CameraPreview(modifier: Modifier = Modifier, cameraController: CameraController) {
-        val context = LocalContext.current
-
-
-        AndroidView(
-            modifier = modifier,
-            factory = { _ ->    // Since we are in MainActivity, the context passed to this lambda is LocalContext.current
+    fun CameraPreview(cameraController: CameraController) {
+        AndroidView(factory = { context ->    // Since we are in MainActivity, the context passed to this lambda is LocalContext.current
                 PreviewView(context).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER // Choose your preferred scale type
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
                     controller = cameraController
                 }
+            } )
+    }
+
+    @Composable
+    fun CameraButtonRow(cameraController: LifecycleCameraController, cameraExecutor: ExecutorService) {
+        val context = this@MainActivity
+
+        Button(shape = RoundedCornerShape(100),
+            colors = ButtonDefaults.buttonColors(Color(0x77FFFFFF)),
+            onClick = {
+                val jpegFile = File(context.filesDir, TEMP_JPEG_NAME)
+                cameraController.takePicture(
+                    ImageCapture.OutputFileOptions.Builder(jpegFile).build(),
+                    cameraExecutor,
+                    object : ImageCapture.OnImageSavedCallback {        // In-place class definition & object creation
+                        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                            convertToRaw(context, jpegFile)
+                            Toast.makeText(context, "Input raw file updated", Toast.LENGTH_SHORT).show()
+                        }
+                        override fun onError(exception: ImageCaptureException) {
+                            Toast.makeText(context, "Capture Failed: ${exception.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
-        )
+        ) { }
+
+        Button(shape = RoundedCornerShape(100),
+            colors = ButtonDefaults.buttonColors(Color(0x77FFFFFF)),
+            onClick = { }
+        ) { }
     }
 
     // ------------------------- Private member functions ----------------------------
 
     private fun checkPermission(context: Context) : Boolean {
-        return ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun createInputLists(context: Context) {
@@ -248,6 +317,20 @@ class MainActivity : ComponentActivity() {
         }
         catch (e: IOException) {
             Log.e("AssetCopy", "Failed to copy asset file: $fileName", e)
+        }
+    }
+
+    private fun convertToRaw(context: Context, jpegFile: File) {
+        // Read jpeg as bitmap, and scale/resize
+        val bitmap = BitmapFactory.decodeFile(jpegFile.absolutePath)
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap,224,224,true)
+        // Copy scaled bitmap to buffer
+        val byteBuffer = ByteBuffer.allocate(224 * 224 * 3)     // Required to use bitmap.copyPixelsToBuffer
+        resizedBitmap.copyPixelsToBuffer(byteBuffer)
+        // Write buffer contents to raw file
+        val rawFile = File(context.filesDir, INPUT_RAW_NAME)
+        rawFile.outputStream().use {                        // Auto open/close stream
+            it.write(byteBuffer.array())
         }
     }
 

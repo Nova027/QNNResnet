@@ -109,7 +109,7 @@ Java_com_example_qnnresnet_MainActivity_qnnLoadLibsAndCreateApp([[maybe_unused]]
     auto parsed_in_type = iotensor::InputDataType::FLOAT;
     auto parsed_profile_level = sample_app::ProfilingLevel::OFF;
     app = std::make_unique<app_t> (qnn_func_ptrs, g_input_list_path, "",
-                                   sg_backend_handle,g_working_dir, true, parsed_out_type,
+                                   sg_backend_handle,g_working_dir, false, parsed_out_type,
                                    parsed_in_type, parsed_profile_level,true,
                                    "", "");
     if (app == nullptr)
