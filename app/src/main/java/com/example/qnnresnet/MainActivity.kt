@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.BitmapFactory.decodeByteArray
 import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
@@ -17,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
@@ -27,7 +28,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,26 +49,30 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.blue
+import androidx.core.graphics.green
+import androidx.core.graphics.red
 import com.example.qnnresnet.ui.theme.QNNResnetTheme
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
     // ----------------------- Static init and Member variables ---------------------
     companion object {
-        const val MODEL_NAME = "resnet50-snapdragon_8_gen_2.so"
+        // const val MODEL_NAME = "resnet50-snapdragon_8_gen_2.so"
+        const val MODEL_NAME = "resnet50_quantized-snapdragon_8_gen_2.so"
         const val CPU_BACKEND_NAME = "libQnnCpu.so"
         // const val GPU_BACKEND_NAME = "libQnnGpu.so"
         // const val HTP_BACKEND_NAME = "libQnnHtp.so"
-        const val INPUT_RAW_NAME = "resnet_f32.raw"
+        const val INPUT_RAW_NAME = "resnet_uint8.raw"
         const val INPUT_LIST_NAME = "input_list.txt"
         const val LABEL_LIST_NAME = "imagenet-classes.txt"
 
-        const val TEMP_JPEG_NAME = "CAM_OUT.jpg"
+        const val INPUT_HEIGHT = 224
+        const val INPUT_WIDTH = 224
 
         const val NATIVE_SUCCESS = 0
 
@@ -132,7 +136,7 @@ class MainActivity : ComponentActivity() {
             contract = ActivityResultContracts.RequestPermission(),
             onResult = { granted ->
                 hasCameraPermission.value = granted
-                showCamera.value = granted
+                if (granted) showCamera.value = true
             }
         )
 
@@ -164,7 +168,7 @@ class MainActivity : ComponentActivity() {
                     else if (hasCameraPermission.value)     // If showCamera is false, but this is true => Disabled camera with button, so must turn off cam
                         CameraUI(enableCamera = false)
 
-                    Spacer(modifier = Modifier.fillMaxHeight())
+                    Spacer(modifier = Modifier.weight(1f))
 
                     // Camera on/off button
                     Button(onClick = {
@@ -261,20 +265,23 @@ class MainActivity : ComponentActivity() {
     fun CameraButtonRow(cameraController: LifecycleCameraController, cameraExecutor: ExecutorService) {
         val context = this@MainActivity
 
-        Button(shape = RoundedCornerShape(100),
+        Button(shape = RoundedCornerShape(50),
             colors = ButtonDefaults.buttonColors(Color(0x77FFFFFF)),
             onClick = {
-                val jpegFile = File(context.filesDir, TEMP_JPEG_NAME)
                 cameraController.takePicture(
-                    ImageCapture.OutputFileOptions.Builder(jpegFile).build(),
                     cameraExecutor,
-                    object : ImageCapture.OnImageSavedCallback {        // In-place class definition & object creation
-                        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                            convertToRaw(context, jpegFile)
-                            Toast.makeText(context, "Input raw file updated", Toast.LENGTH_SHORT).show()
+                    object : ImageCapture.OnImageCapturedCallback() {        // In-place class definition & object creation
+                        override fun onCaptureSuccess(image: ImageProxy) {
+                            saveJPGToResizedRGB(context, image)
+                            runOnUiThread {
+                                Toast.makeText(context, "Input raw file updated", Toast.LENGTH_SHORT).show()
+                            }
+                            image.close()
                         }
                         override fun onError(exception: ImageCaptureException) {
-                            Toast.makeText(context, "Capture Failed: ${exception.message}", Toast.LENGTH_SHORT).show()
+                            runOnUiThread {
+                                Toast.makeText(context, "Capture Failed: ${exception.message}", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 )
@@ -320,17 +327,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun convertToRaw(context: Context, jpegFile: File) {
-        // Read jpeg as bitmap, and scale/resize
-        val bitmap = BitmapFactory.decodeFile(jpegFile.absolutePath)
-        val resizedBitmap = Bitmap.createScaledBitmap(bitmap,224,224,true)
-        // Copy scaled bitmap to buffer
-        val byteBuffer = ByteBuffer.allocate(224 * 224 * 3)     // Required to use bitmap.copyPixelsToBuffer
-        resizedBitmap.copyPixelsToBuffer(byteBuffer)
+    private fun saveJPGToResizedRGB(context: Context, image: ImageProxy, targetWidth: Int = INPUT_WIDTH, targetHeight: Int = INPUT_HEIGHT) {
+        // Decode JPEG imageproxy to bitmap, and resize to target size
+        val bytes = ByteArray(image.planes[0].buffer.capacity())
+        image.planes[0].buffer.get(bytes)
+        val bitmap = decodeByteArray(bytes,0, bytes.size)
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight,true)
+        // Copy RGB data from bitmap to buffer
+        val rgbBuffer = ByteArray(targetWidth * targetHeight * 3)
+        var rgbIndex = 0
+        for (y in 0 until targetHeight) {
+            for (x in 0 until targetWidth) {
+                val pixel = resizedBitmap.getPixel(x, y)
+                rgbBuffer[rgbIndex++] = pixel.red.toByte()
+                rgbBuffer[rgbIndex++] = pixel.green.toByte()
+                rgbBuffer[rgbIndex++] = pixel.blue.toByte()
+            }
+        }
         // Write buffer contents to raw file
         val rawFile = File(context.filesDir, INPUT_RAW_NAME)
         rawFile.outputStream().use {                        // Auto open/close stream
-            it.write(byteBuffer.array())
+            it.write(rgbBuffer)
         }
     }
 

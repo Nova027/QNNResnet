@@ -106,7 +106,7 @@ Java_com_example_qnnresnet_MainActivity_qnnLoadLibsAndCreateApp([[maybe_unused]]
         return EXIT_FAILURE;
     }
     auto parsed_out_type = iotensor::OutputDataType::FLOAT_ONLY;
-    auto parsed_in_type = iotensor::InputDataType::FLOAT;
+    auto parsed_in_type = iotensor::InputDataType::NATIVE;
     auto parsed_profile_level = sample_app::ProfilingLevel::OFF;
     app = std::make_unique<app_t> (qnn_func_ptrs, g_input_list_path, "",
                                    sg_backend_handle,g_working_dir, false, parsed_out_type,
